@@ -55,4 +55,23 @@ Expected addresses (same on every chain, valid until the bytecode changes):
 - ForwarderFactory `0xFA109f39ff2300D2016c145E0519eCfe7e64BD60`
 - PaymentForwarder implementation `0x78d1Ed9b507F9912850644D0C3dD8d5Eb5Bdb26a`
 
+## Testnet deployments (14.10.2026)
+
+| Network | ForwarderFactory | Notes |
+|---|---|---|
+| Ethereum Sepolia (11155111) | `0xFA109f39ff2300D2016c145E0519eCfe7e64BD60` | deploy tx `0x1989157997f1a3254869bdb763238c6179189085d191529c777780b9a6406f15`, 7.77 M gas (Glamsterdam/EIP-8037 state gas) |
+| Base Sepolia (84532) | `0xFA109f39ff2300D2016c145E0519eCfe7e64BD60` | |
+| BSC Testnet (97) | — | faucet requires 0.002 BNB on BSC mainnet |
+
+End-to-end test payments with a mock token passed on both networks (both fee plans).
+
+| `deployAndFlush` (fresh address, new holders) | Sepolia (Glamsterdam) | Base Sepolia |
+|---|---|---|
+| prepaid plan | 479 185 | 90 239 – 115 977 |
+| on-chain fee plan | 494 703 | 107 183 – 124 283 |
+
+**Glamsterdam (EIP-8037) is live on Sepolia since 06.10.2026, mainnet expected Q4 2026**: creating new state (contracts, new token holders) is charged separately, so a fresh payment address on Ethereum L1 costs ~4× more gas than today. Mitigation for the backend: reuse already-deployed forwarders (per-merchant pool / static addresses) instead of one new clone per invoice on L1; L2s are unaffected in practice. Note: Foundry 1.8.5 under-estimates gas on Sepolia — use `--gas-estimate-multiplier`.
+
+Lesson from Base Sepolia: a load-balanced public RPC returned stale state, so a flush ran before the payment was visible and 100 test tokens stayed on an undeployed address. They were recovered later by anyone-can-flush (salt brute-forced from the timestamp). Backend rule: detect payments and flush only after N confirmations on the same node, and re-scan issued addresses periodically.
+
 Status: **not audited. Testnets only.**
