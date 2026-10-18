@@ -79,6 +79,14 @@ contract TronForwarderFactory {
         if (includeNative) TronPaymentForwarder(payable(forwarder)).flushNative();
     }
 
+    /// @notice Collects accrued fees of `token` from several forwarders in one transaction.
+    function collectFees(address[] calldata forwarders, IERC20 token) external returns (uint256 total) {
+        for (uint256 i = 0; i < forwarders.length; ++i) {
+            // forge-lint: disable-next-line(calls-loop)
+            total += TronPaymentForwarder(payable(forwarders[i])).collectFees(token);
+        }
+    }
+
     /// @dev Same init code as OpenZeppelin Clones (EIP-1167 with immutable args), hashed with our prefix.
     function _predict(bytes memory args, bytes32 salt) private view returns (address) {
         bytes32 initCodeHash = keccak256(
