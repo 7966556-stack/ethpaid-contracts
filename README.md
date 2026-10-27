@@ -1,9 +1,39 @@
 # ethpaid-contracts
 
-Non-custodial payment addresses for **ETHPAID Pay** (EVM chains).
+Non-custodial payment addresses for **ETHPAID Pay** (EVM chains and Tron), operated by SIA ETHPAID (Latvia).
 
 - `ForwarderFactory` — computes and deploys payment addresses (EIP-1167 clones via CREATE2).
 - `PaymentForwarder` — the clone: forwards everything it receives to the merchant (minus an optional fee).
+- `tron/TronForwarderFactory`, `tron/TronPaymentForwarder` — the same design for TRON (fee accrues in the clone and
+  can only be collected to the fixed fee wallet).
+
+## Mainnet deployments (tag `v1.0.0`)
+
+| Network | Factory | Implementation | Source |
+|---|---|---|---|
+| Ethereum | [0xFA109f39ff2300D2016c145E0519eCfe7e64BD60](https://etherscan.io/address/0xFA109f39ff2300D2016c145E0519eCfe7e64BD60#code) | [0x78d1Ed9b507F9912850644D0C3dD8d5Eb5Bdb26a](https://etherscan.io/address/0x78d1Ed9b507F9912850644D0C3dD8d5Eb5Bdb26a#code) | verified on Etherscan and Sourcify |
+| BNB Chain | [0xFA109f…BD60](https://bscscan.com/address/0xFA109f39ff2300D2016c145E0519eCfe7e64BD60#code) | [0x78d1Ed…b26a](https://bscscan.com/address/0x78d1Ed9b507F9912850644D0C3dD8d5Eb5Bdb26a#code) | verified on BscScan and Sourcify |
+| Base | [0xFA109f…BD60](https://basescan.org/address/0xFA109f39ff2300D2016c145E0519eCfe7e64BD60#code) | [0x78d1Ed…b26a](https://basescan.org/address/0x78d1Ed9b507F9912850644D0C3dD8d5Eb5Bdb26a#code) | verified on BaseScan and Sourcify |
+| Tron | [TNkKPtZs79Fz8qEckmjEvRyXVxhiUDKGzp](https://tronscan.org/#/contract/TNkKPtZs79Fz8qEckmjEvRyXVxhiUDKGzp) | [TLbhrRk23QAL9VVZEquK4rtU4Snj82EY4v](https://tronscan.org/#/contract/TLbhrRk23QAL9VVZEquK4rtU4Snj82EY4v) | this repository (see below) |
+
+The EVM factory is deployed with CREATE2 through `0x4e59b44847b379578588920ca78fbf26c0b4956c` (salt
+`keccak256("ETHPAID ForwarderFactory v1")`), so it has the same address on every EVM chain. The Tron factory takes one
+constructor argument, the CREATE2 address prefix `0x41`.
+
+### Verify it yourself
+
+All contracts are compiled with standard solc 0.8.28 (`evm_version = "paris"`, optimizer 10 000 runs, no metadata hash;
+see `foundry.toml`). Tronscan's verifier did not match this metadata-free build (27.10.2026), so for Tron — and for any
+network — anyone can rebuild and compare byte for byte:
+
+```bash
+git clone --recurse-submodules https://github.com/7966556-stack/ethpaid-contracts && cd ethpaid-contracts
+git checkout v1.0.0 -- src foundry.toml && ./scripts/verify-deployment.sh
+```
+
+The script needs Foundry and python3, no API keys (public RPC nodes and TronGrid). It checks the creation code (Tron)
+and the runtime code of every factory and implementation; immutable values (implementation address, Tron prefix) are
+read from the chain and checked against the expected addresses.
 
 ## Guarantees
 
