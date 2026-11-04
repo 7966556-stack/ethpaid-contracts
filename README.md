@@ -51,6 +51,20 @@ Two fee plans (chosen per merchant):
 - **prepaid** — `feeBps = 0`, `feeRecipient = address(0)`; one transfer per flush, fee is charged from the merchant's prepaid balance off-chain.
 - **on-chain fee** — `feeBps > 0`; the clone splits every flush between `feeRecipient` and the merchant.
 
+## Forward your payments yourself
+
+Forwarding is permissionless: a merchant never needs ETHPAID to receive its funds. With the parameters of an address
+(the bot's “Self-forward kit” or `GET /v1/forward-kit`):
+
+- **web page** — [`tools/forward/index.html`](tools/forward/index.html): one self-contained file, no servers;
+  checks the address against the factory and forwards with your own wallet (MetaMask etc., TronLink);
+  published at https://ethpaid.com/forward/;
+- **command line** — `python3 scripts/self-forward.py --kit ethpaid-forward-kit.json` (EVM; prints the transaction,
+  never asks for a key);
+- **block explorer** — the factory's “Write Contract” → `deployAndFlush`.
+
+Details, the salt formula and the explorer fields: [docs/self-forward.md](docs/self-forward.md).
+
 ## Gas (real Ethereum mainnet state, anvil fork of our node, 14.10.2026)
 
 | Scenario | Gas |

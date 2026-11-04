@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ETHPAID self-forward</title>
+<meta name="description" content="Forward the funds on your ETHPAID payment addresses to your payout wallet yourself, with your own wallet. No ETHPAID servers involved.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https: http://127.0.0.1:8545 http://localhost:8545; img-src data:; base-uri 'none'; form-action 'none'">
+<!--
+  ETHPAID self-forward tool. One self-contained file: no external scripts, fonts or servers.
+  It talks to the blockchain only through the wallet in your browser (MetaMask, Rabby, Trust, TronLink, ...).
+
+  What it does: every ETHPAID payment address is a contract whose recipients (your payout wallet and the fixed
+  service fee) are baked into it. Forwarding is a public function anyone may call. This page checks the address
+  against the public factory (computeAddress) and, if it matches, calls factory.deployAndFlush(...) from YOUR wallet.
+  You pay the network fee; the funds go only where the contract says.
+
+  Source and docs: https://github.com/7966556-stack/ethpaid-contracts (tools/forward, docs/self-forward.md)
+-->
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--text:#1a1a1a;--muted:#5f6368;--line:#e3e3df;--accent:#2f5bea;--ok:#137333;--bad:#b3261e;--warn:#8a5a00;--code:#f1f1ee}
+@media (prefers-color-scheme:dark){:root{--bg:#121212;--card:#1d1d1d;--text:#ececec;--muted:#a0a0a0;--line:#333;--accent:#7b9cff;--ok:#6dd58c;--bad:#ff8a80;--warn:#f2c46d;--code:#262626}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;margin:0 0 4px}
+h2{font-size:17px;margin:0 0 12px}
+p{margin:0 0 10px}
+.muted{color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin:16px 0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+label{display:block;font-size:13px;color:var(--muted);margin:8px 0 3px}
+input,select,textarea{width:100%;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text)}
+textarea{min-height:90px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 12px}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;word-break:break-all}
+code{background:var(--code);padding:1px 5px;border-radius:4px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 6px;border-top:1px solid var(--line);vertical-align:top;font-size:14px}
+th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+.pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;border:1px solid var(--line)}
+.lang{float:right}
+#log{white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,Menlo,monospace;font-size:12px;max-height:220px;overflow:auto}
+.mobile-to{display:none}
+@media (max-width:640px){thead{display:none}table,tbody,tr,td{display:block}tr{border-top:1px solid var(--line);padding:10px 0}td{border:0;padding:2px 0}td:nth-child(1){font-weight:600}td:nth-child(3){display:none}.mobile-to{display:block;font-size:12px;color:var(--muted);margin-top:2px}}
+</style>
+</head>
+<body>
+<main>
+  <div class="lang"><button id="langBtn" type="button">RU</button></div>
+  <h1 data-t="title"></h1>
+  <p class="muted" data-t="lead"></p>
+
+  <div class="card">
+    <h2 data-t="howTitle"></h2>
+    <ol class="muted" style="margin:0;padding-left:20px">
+      <li data-t="how1"></li><li data-t="how2"></li><li data-t="how3"></li><li data-t="how4"></li>
+    </ol>
+    <p class="warn" style="margin-top:10px" data-t="never"></p>
+  </div>
+
+  <div class="card">
+    <h2 data-t="loadTitle"></h2>
+    <p class="muted" data-t="loadHint"></p>
+    <div class="row"><input type="file" id="kitFile" accept=".json,application/json" style="max-width:360px"></div>
+    <label for="kitText" data-t="orPaste"></label>
+    <textarea id="kitText" spellcheck="false"></textarea>
+    <div class="row" style="margin-top:8px"><button type="button" id="kitLoad" data-t="load"></button></div>
+    <details style="margin-top:12px"><summary data-t="manualTitle"></summary>
+      <div class="grid">
+        <div><label data-t="fNetwork"></label><select id="mNet"></select></div>
+        <div><label data-t="fAddress"></label><input id="mAddr" class="mono"></div>
+        <div><label data-t="fMerchant"></label><input id="mMerchant" class="mono"></div>
+        <div><label data-t="fFeeRcpt"></label><input id="mFeeR" class="mono"></div>
+        <div><label data-t="fFeeBps"></label><input id="mBps" inputmode="numeric"></div>
+        <div><label data-t="fFeeFixed"></label><input id="mFixed" inputmode="numeric" value="0"></div>
+        <div style="grid-column:1/-1"><label data-t="fSalt"></label><input id="mSalt" class="mono"></div>
+      </div>
+      <div class="row" style="margin-top:10px"><button type="button" id="mAdd" data-t="add"></button></div>
+    </details>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0" data-t="listTitle"></h2>
+      <div class="row">
+        <span id="walletInfo" class="muted"></span>
+        <button type="button" id="connectEvm" data-t="connectEvm"></button>
+        <button type="button" id="connectTron" data-t="connectTron"></button>
+      </div>
+    </div>
+    <p class="muted" id="emptyHint" data-t="empty" style="margin-top:10px"></p>
+    <table id="tbl" hidden>
+      <thead><tr><th data-t="cNet"></th><th data-t="cAddr"></th><th data-t="cTo"></th><th data-t="cState"></th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 data-t="logTitle"></h2>
+    <div id="log" class="muted"></div>
+  </div>
+
+  <p class="muted" style="font-size:13px" data-t="footer"></p>
+</main>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- networks (contracts v1.0.0)
+const EVM_FACTORY = "0xFA109f39ff2300D2016c145E0519eCfe7e64BD60"; // same address on every EVM chain (CREATE2)
+const NETS = {
+  ethereum: {name: "Ethereum", chainId: 1, factory: EVM_FACTORY, native: "ETH", explorer: "https://etherscan.io",
+    rpc: "https://ethereum-rpc.publicnode.com",
+    tokens: [["USDT", "0xdAC17F958D2ee523a2206206994597C13D831ec7", 6], ["USDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6]]},
+  bsc: {name: "BNB Chain", chainId: 56, factory: EVM_FACTORY, native: "BNB", explorer: "https://bscscan.com",
+    rpc: "https://bsc-dataseed.bnbchain.org",
+    tokens: [["USDT", "0x55d398326f99059fF775485246999027B3197955", 18], ["USDC", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18]]},
+  base: {name: "Base", chainId: 8453, factory: EVM_FACTORY, native: "ETH", explorer: "https://basescan.org",
+    rpc: "https://mainnet.base.org", tokens: [["USDC", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6]]},
+  tron: {name: "Tron", tron: true, nile: false, factory: "TNkKPtZs79Fz8qEckmjEvRyXVxhiUDKGzp", native: "TRX",
+    explorer: "https://tronscan.org", tokens: [["USDT", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", 6]]},
+  sepolia: {name: "Sepolia (test)", chainId: 11155111, factory: EVM_FACTORY, native: "ETH", explorer: "https://sepolia.etherscan.io",
+    rpc: "https://ethereum-sepolia-rpc.publicnode.com", tokens: [["USDT", "0x5DEC28792fbF05C4272252a5008A86b9ED46aBf7", 6]]},
+  "bsc-testnet": {name: "BNB Chain testnet", chainId: 97, factory: EVM_FACTORY, native: "BNB", explorer: "https://testnet.bscscan.com",
+    rpc: "https://bsc-testnet-rpc.publicnode.com", tokens: [["USDT", "0x7f16a363339614A1479b529f65fA56Ca793a68F0", 6]]},
+  "base-sepolia": {name: "Base Sepolia (test)", chainId: 84532, factory: EVM_FACTORY, native: "ETH", explorer: "https://sepolia.basescan.org",
+    rpc: "https://sepolia.base.org", tokens: [["USDT", "0x7f16a363339614A1479b529f65fA56Ca793a68F0", 6]]},
+  "tron-nile": {name: "Tron Nile (test)", tron: true, nile: true, factory: "TGUD7c2jTpNEGBgi3f8tGBosVzX6jacvEH", native: "TRX",
+    explorer: "https://nile.tronscan.org", tokens: [["USDT", "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf", 6]]},
+  localhost: {name: "Local dev chain", chainId: 31337, factory: EVM_FACTORY, native: "ETH", explorer: "", dev: true, tokens: []},
+};
+const SEL = {computeAddress: "7db7e86c", deployAndFlush: "a20a1944", balanceOf: "70a08231"}; // keccak256(signature)[:4]
+const TRON_SIG = {
+  computeAddress: "computeAddress(address,address,uint16,uint64,bytes32)",
+  deployAndFlush: "deployAndFlush(address,address,uint16,uint64,bytes32,address[],bool)",
+};
+const TRON_FEE_LIMIT = 200_000_000; // 200 TRX: an upper bound for the network fee, not a payment
+
+// ---------------------------------------------------------------- texts
+const T = {
+  en: {
+    title: "Forward your payments yourself",
+    lead: "Every ETHPAID payment address is a smart contract that can send funds only to your payout wallet (and the fixed service fee written into it). This page lets you trigger that with your own wallet — without ETHPAID's servers.",
+    howTitle: "How it works",
+    how1: "Load your parameters: the export file from the ETHPAID bot or API, a link from an invoice, or enter them by hand.",
+    how2: "Connect your wallet (MetaMask, Rabby, Trust… for Ethereum, BNB Chain, Base; TronLink for Tron). Any wallet works — it only pays the network fee.",
+    how3: "The page asks the public factory contract whether the address really belongs to these parameters, and shows what is on it.",
+    how4: "“Forward” sends one transaction to the factory. The contract itself sends the funds to the recipients fixed in it.",
+    never: "Never enter a seed phrase or private key anywhere. This page never asks for one.",
+    loadTitle: "1. Parameters",
+    loadHint: "Export file: bot → Settings → “Self-forward kit”, or GET /v1/forward-kit in the API.",
+    orPaste: "…or paste its contents (JSON):",
+    load: "Load",
+    manualTitle: "Enter one address by hand",
+    fNetwork: "Network", fAddress: "Payment address", fMerchant: "Payout wallet (merchant)", fFeeRcpt: "Fee recipient",
+    fFeeBps: "Fee, basis points (100 = 1%)", fFeeFixed: "Fixed fee, token units (Tron only)", fSalt: "Salt (0x…, 32 bytes)",
+    add: "Add",
+    listTitle: "2. Addresses",
+    connectEvm: "Connect wallet", connectTron: "Connect TronLink",
+    empty: "No addresses loaded yet.",
+    cNet: "Network", cAddr: "Address", cTo: "Funds can go only to", cState: "Status",
+    check: "Check", forward: "Forward",
+    feeTo: "fee", feeNone: "no fee",
+    notChecked: "not checked", match: "✓ matches the factory", mismatch: "✗ does NOT match these parameters — do not use",
+    notDeployed: "contract not created yet (created by the first forward)", deployed: "contract exists",
+    empty0: "nothing to forward",
+    needWallet: "Connect a wallet for this network first.",
+    wrongTron: "TronLink is connected to another Tron network. Switch it to: ",
+    noEvm: "No Ethereum wallet found in this browser. Install MetaMask or Rabby, or open this page in your wallet's browser.",
+    noTron: "TronLink not found. Install TronLink or open this page in its browser.",
+    confirm: "Send one transaction to the factory {f}.\nThe contract forwards everything listed to:\n  {m}\n{fee}\nYou pay only the network fee. Continue?",
+    confirmFee: "  fee: {bps} → {r}",
+    sent: "Sent: ", mined: "Done. Funds forwarded: ", failed: "Transaction failed: ",
+    unknownNet: "Unknown network: ", badFactory: "Factory is not the official one for this network — entry ignored: ",
+    loaded: "Loaded addresses: ",
+    logTitle: "Log",
+    tronEnergy: "On Tron the network fee is paid in TRX (energy); keep ~30 TRX on the connected account.",
+    footer: "Open source, no tracking, no servers: works the same when saved to your computer. ETHPAID never receives your keys or funds. Code: github.com/7966556-stack/ethpaid-contracts",
+  },
+  ru: {
+    title: "Пересылка платежей самостоятельно",
+    lead: "Каждый платёжный адрес ETHPAID — смарт-контракт, который может отправить средства только на ваш кошелёк выплат (и фиксированную комиссию сервиса, записанную в нём). Здесь вы запускаете пересылку своим кошельком — без серверов ETHPAID.",
+    howTitle: "Как это работает",
+    how1: "Загрузите параметры: файл выгрузки из бота или API ETHPAID, ссылку из счёта или введите вручную.",
+    how2: "Подключите кошелёк (MetaMask, Rabby, Trust… для Ethereum, BNB Chain, Base; TronLink для Tron). Подойдёт любой — он только платит комиссию сети.",
+    how3: "Страница спросит публичный контракт-фабрику, действительно ли адрес соответствует этим параметрам, и покажет, что на нём лежит.",
+    how4: "«Переслать» отправляет одну транзакцию фабрике. Средства отправляет сам контракт — получателям, записанным в нём.",
+    never: "Никогда и нигде не вводите сид-фразу или приватный ключ. Эта страница их не запрашивает.",
+    loadTitle: "1. Параметры",
+    loadHint: "Файл выгрузки: бот → Настройки → «Набор для самостоятельной пересылки» или GET /v1/forward-kit в API.",
+    orPaste: "…или вставьте его содержимое (JSON):",
+    load: "Загрузить",
+    manualTitle: "Ввести один адрес вручную",
+    fNetwork: "Сеть", fAddress: "Платёжный адрес", fMerchant: "Кошелёк выплат (магазина)", fFeeRcpt: "Получатель комиссии",
+    fFeeBps: "Комиссия, базисные пункты (100 = 1 %)", fFeeFixed: "Фиксированная комиссия, единицы токена (только Tron)", fSalt: "Соль (0x…, 32 байта)",
+    add: "Добавить",
+    listTitle: "2. Адреса",
+    connectEvm: "Подключить кошелёк", connectTron: "Подключить TronLink",
+    empty: "Адреса ещё не загружены.",
+    cNet: "Сеть", cAddr: "Адрес", cTo: "Куда могут уйти средства", cState: "Состояние",
+    check: "Проверить", forward: "Переслать",
+    feeTo: "комиссия", feeNone: "без комиссии",
+    notChecked: "не проверен", match: "✓ совпадает с фабрикой", mismatch: "✗ НЕ соответствует параметрам — не используйте",
+    notDeployed: "контракт ещё не создан (создастся при первой пересылке)", deployed: "контракт создан",
+    empty0: "пересылать нечего",
+    needWallet: "Сначала подключите кошелёк для этой сети.",
+    wrongTron: "TronLink подключён к другой сети Tron. Переключите на: ",
+    noEvm: "В браузере нет Ethereum-кошелька. Установите MetaMask или Rabby или откройте страницу во встроенном браузере кошелька.",
+    noTron: "TronLink не найден. Установите TronLink или откройте страницу в его браузере.",
+    confirm: "Будет отправлена одна транзакция фабрике {f}.\nКонтракт перешлёт всё перечисленное на:\n  {m}\n{fee}\nВы платите только комиссию сети. Продолжить?",
+    confirmFee: "  комиссия: {bps} → {r}",
+    sent: "Отправлено: ", mined: "Готово. Переслано: ", failed: "Транзакция не прошла: ",
+    unknownNet: "Неизвестная сеть: ", badFactory: "Фабрика не официальная для этой сети — запись пропущена: ",
+    loaded: "Загружено адресов: ",
+    logTitle: "Журнал",
+    tronEnergy: "В Tron комиссия сети платится в TRX (энергия): держите на подключённом аккаунте ~30 TRX.",
+    footer: "Открытый код, без отслеживания и серверов: работает так же, если сохранить страницу на компьютер. ETHPAID не получает ваши ключи и средства. Код: github.com/7966556-stack/ethpaid-contracts",
+  },
+};
+let lang = (localStorageGet("lang") || (navigator.language || "en")).toLowerCase().startsWith("ru") ? "ru" : "en";
+function localStorageGet(k) { try { return localStorage.getItem("ethpaid-forward:" + k); } catch { return null; } }
+function localStorageSet(k, v) { try { localStorage.setItem("ethpaid-forward:" + k, v); } catch { /* private mode */ } }
+const t = (k) => T[lang][k] ?? T.en[k] ?? k;
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = t(el.dataset.t); });
+  document.getElementById("langBtn").textContent = lang === "ru" ? "EN" : "RU";
+  render();
+}
+
+// ---------------------------------------------------------------- helpers
+const $ = (id) => document.getElementById(id);
+function log(msg, cls) {
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  line.textContent = new Date().toLocaleTimeString() + "  " + msg;
+  $("log").prepend(line);
+}
+const isHexAddr = (a) => /^0x[0-9a-fA-F]{40}$/.test(a);
+const isTronAddr = (a) => /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a);
+const strip0x = (h) => h.replace(/^0x/, "");
+const word = (hex) => strip0x(hex).toLowerCase().padStart(64, "0");
+const wordNum = (n) => BigInt(n).toString(16).padStart(64, "0");
+function units(v, dec) {
+  const s = v.toString().padStart(dec + 1, "0");
+  const i = s.slice(0, s.length - dec), f = s.slice(s.length - dec).replace(/0+$/, "");
+  return f ? i + "." + f.slice(0, 8) : i;
+}
+const short = (a) => a.length > 14 ? a.slice(0, 8) + "…" + a.slice(-6) : a;
+function explorerAddr(net, a) {
+  if (!net.explorer) return null;
+  return net.tron ? `${net.explorer}/#/address/${a}` : `${net.explorer}/address/${a}`;
+}
+function explorerTx(net, h) {
+  if (!net.explorer) return null;
+  return net.tron ? `${net.explorer}/#/transaction/${strip0x(h)}` : `${net.explorer}/tx/${h}`;
+}
+
+// ---------------------------------------------------------------- state
+const entries = []; // {net, key, address, merchant, feeRecipient, feeBps, feeFixed, salt, state, balances}
+let evm = null; // {account, chainId}
+let tron = null; // {account, nile}
+
+function addEntry(raw) {
+  const key = String(raw.network || "").trim();
+  const net = NETS[key];
+  if (!net) { log(t("unknownNet") + key, "bad"); return false; }
+  if (raw.factory && raw.factory.toLowerCase() !== net.factory.toLowerCase()) { log(t("badFactory") + raw.address, "bad"); return false; }
+  const e = {
+    key, net, address: String(raw.address || "").trim(), merchant: String(raw.merchant || raw.payout_address || "").trim(),
+    feeRecipient: String(raw.fee_recipient || "").trim(), feeBps: Number(raw.fee_bps || 0), feeFixed: String(raw.fee_fixed || 0),
+    salt: String(raw.salt || "").trim(), state: "unchecked", balances: [], deployed: null, extraTokens: [],
+  };
+  if (!/^0x/.test(e.salt)) e.salt = "0x" + e.salt;
+  // optional extra tokens, e.g. one sent by mistake: [{symbol, address, decimals}]
+  const known = new Set(net.tokens.map((x) => x[1].toLowerCase()));
+  for (const x of Array.isArray(raw.tokens) ? raw.tokens : []) {
+    const addr = String(x.address || "");
+    if ((net.tron ? isTronAddr(addr) : isHexAddr(addr)) && !known.has(addr.toLowerCase())) {
+      e.extraTokens.push([String(x.symbol || "?").slice(0, 12), addr, Number(x.decimals ?? 18)]);
+      known.add(addr.toLowerCase());
+    }
+  }
+  const okAddr = net.tron ? isTronAddr : isHexAddr;
+  if (!okAddr(e.address) || !okAddr(e.merchant) || !okAddr(e.feeRecipient) || !/^0x[0-9a-fA-F]{64}$/.test(e.salt)
+      || !(e.feeBps >= 0 && e.feeBps <= 500) || (!net.tron && Number(e.feeFixed) !== 0)) {
+    log("✗ " + (e.address || "?") + ": invalid parameters", "bad"); return false;
+  }
+  if (entries.some((x) => x.key === e.key && x.address.toLowerCase() === e.address.toLowerCase())) return false;
+  entries.push(e);
+  return true;
+}
+
+function loadKit(text) {
+  let data;
+  try { data = JSON.parse(text); } catch (err) { log("JSON: " + err.message, "bad"); return; }
+  const list = Array.isArray(data) ? data : (data.addresses || []);
+  let n = 0;
+  for (const a of list) if (addEntry(a)) n++;
+  log(t("loaded") + n);
+  render();
+}
+
+// ---------------------------------------------------------------- rendering
+function render() {
+  const tbody = $("rows");
+  tbody.textContent = "";
+  $("tbl").hidden = entries.length === 0;
+  $("emptyHint").hidden = entries.length > 0;
+  entries.forEach((e, i) => {
+    const tr = document.createElement("tr");
+    const td = () => { const c = document.createElement("td"); tr.appendChild(c); return c; };
+    td().textContent = e.net.name;
+    const ca = td();
+    const href = explorerAddr(e.net, e.address);
+    if (href) { const a = document.createElement("a"); a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = short(e.address); a.className = "mono"; ca.appendChild(a); }
+    else { ca.textContent = short(e.address); ca.className = "mono"; }
+    const toText = "→ " + short(e.merchant) + (e.feeBps || Number(e.feeFixed) ? ` + ${t("feeTo")} ${(e.feeBps / 100).toFixed(2)}%${Number(e.feeFixed) ? " + fixed" : ""} → ${short(e.feeRecipient)}` : ` (${t("feeNone")})`);
+    const mt = document.createElement("div"); mt.className = "mobile-to mono"; mt.textContent = toText; ca.appendChild(mt);
+    const to = td();
+    to.className = "mono";
+    to.textContent = toText;
+    const st = td();
+    const s1 = document.createElement("div");
+    s1.className = e.state === "match" ? "ok" : e.state === "mismatch" ? "bad" : "muted";
+    s1.textContent = t(e.state === "match" ? "match" : e.state === "mismatch" ? "mismatch" : "notChecked");
+    st.appendChild(s1);
+    if (e.state === "match") {
+      const s2 = document.createElement("div"); s2.className = "muted"; s2.style.fontSize = "13px";
+      s2.textContent = t(e.deployed ? "deployed" : "notDeployed"); st.appendChild(s2);
+      const s3 = document.createElement("div");
+      const nonzero = e.balances.filter((b) => b.amount > 0n);
+      s3.textContent = nonzero.length ? nonzero.map((b) => `${units(b.amount, b.decimals)} ${b.symbol}`).join(", ") : t("empty0");
+      s3.className = nonzero.length ? "" : "muted"; st.appendChild(s3);
+    }
+    const act = td();
+    const b1 = document.createElement("button"); b1.type = "button"; b1.textContent = t("check"); b1.onclick = () => check(i);
+    const b2 = document.createElement("button"); b2.type = "button"; b2.textContent = t("forward"); b2.className = "primary";
+    b2.disabled = !(e.state === "match" && e.balances.some((b) => b.amount > 0n));
+    b2.onclick = () => forward(i);
+    act.append(b1, " ", b2);
+    tbody.appendChild(tr);
+  });
+}
+
+// ---------------------------------------------------------------- EVM (EIP-1193 wallet)
+async function connectEvm() {
+  if (!window.ethereum) { log(t("noEvm"), "bad"); return; }
+  const accs = await window.ethereum.request({method: "eth_requestAccounts"});
+  evm = {account: accs[0], chainId: parseInt(await window.ethereum.request({method: "eth_chainId"}), 16)};
+  window.ethereum.on?.("chainChanged", (c) => { if (evm) evm.chainId = parseInt(c, 16); showWallet(); });
+  window.ethereum.on?.("accountsChanged", (a) => { if (evm) evm.account = a[0]; showWallet(); });
+  showWallet();
+}
+async function ensureChain(net) {
+  if (!evm) await connectEvm();
+  if (!evm) throw new Error(t("needWallet"));
+  if (evm.chainId === net.chainId) return;
+  const hex = "0x" + net.chainId.toString(16);
+  try {
+    await window.ethereum.request({method: "wallet_switchEthereumChain", params: [{chainId: hex}]});
+  } catch (err) {
+    if (err.code !== 4902 || !net.rpc) throw err;
+    await window.ethereum.request({method: "wallet_addEthereumChain", params: [{chainId: hex, chainName: net.name,
+      nativeCurrency: {name: net.native, symbol: net.native, decimals: 18}, rpcUrls: [net.rpc], blockExplorerUrls: [net.explorer]}]});
+  }
+  evm.chainId = net.chainId;
+}
+const ecall = (to, data) => window.ethereum.request({method: "eth_call", params: [{to, data}, "latest"]});
+
+async function checkEvm(e) {
+  await ensureChain(e.net);
+  const data = "0x" + SEL.computeAddress + word(e.merchant) + word(e.feeRecipient) + wordNum(e.feeBps) + word(e.salt);
+  const out = await ecall(e.net.factory, data);
+  const computed = "0x" + strip0x(out).slice(-40);
+  e.state = computed.toLowerCase() === e.address.toLowerCase() ? "match" : "mismatch";
+  if (e.state !== "match") return;
+  e.deployed = strip0x(await window.ethereum.request({method: "eth_getCode", params: [e.address, "latest"]})).length > 0;
+  e.balances = [];
+  for (const [symbol, token, decimals] of e.net.tokens.concat(e.extraTokens)) {
+    const r = await ecall(token, "0x" + SEL.balanceOf + word(e.address));
+    e.balances.push({symbol, token, decimals, amount: BigInt(r === "0x" ? 0 : r)});
+  }
+  const nat = BigInt(await window.ethereum.request({method: "eth_getBalance", params: [e.address, "latest"]}));
+  e.balances.push({symbol: e.net.native, token: null, decimals: 18, amount: nat});
+}
+
+async function forwardEvm(e) {
+  await ensureChain(e.net);
+  const tokens = e.balances.filter((b) => b.token && b.amount > 0n).map((b) => b.token);
+  const native = e.balances.some((b) => !b.token && b.amount > 0n);
+  const data = "0x" + SEL.deployAndFlush + word(e.merchant) + word(e.feeRecipient) + wordNum(e.feeBps) + word(e.salt)
+    + wordNum(0xc0) + wordNum(native ? 1 : 0) + wordNum(tokens.length) + tokens.map(word).join("");
+  const hash = await window.ethereum.request({method: "eth_sendTransaction",
+    params: [{from: evm.account, to: e.net.factory, data, value: "0x0"}]});
+  log(t("sent") + hash + (explorerTx(e.net, hash) ? "  " + explorerTx(e.net, hash) : ""));
+  for (let i = 0; i < 120; i++) {
+    const r = await window.ethereum.request({method: "eth_getTransactionReceipt", params: [hash]});
+    if (r) {
+      if (parseInt(r.status, 16) !== 1) throw new Error(t("failed") + hash);
+      return hash;
+    }
+    await new Promise((ok) => setTimeout(ok, 2500));
+  }
+  return hash;
+}
+
+// ---------------------------------------------------------------- TRON (TronLink)
+async function connectTron() {
+  if (!window.tronLink && !window.tronWeb) { log(t("noTron"), "bad"); return; }
+  if (window.tronLink?.request) await window.tronLink.request({method: "tron_requestAccounts"});
+  const tw = window.tronWeb;
+  if (!tw || !tw.defaultAddress?.base58) { log(t("noTron"), "bad"); return; }
+  tron = {account: tw.defaultAddress.base58, nile: /nile/i.test(tw.fullNode?.host || "")};
+  showWallet();
+  log(t("tronEnergy"));
+}
+async function ensureTron(net) {
+  if (!tron) await connectTron();
+  if (!tron) throw new Error(t("needWallet"));
+  tron.nile = /nile/i.test(window.tronWeb.fullNode?.host || "");
+  if (tron.nile !== net.nile) throw new Error(t("wrongTron") + net.name);
+  return window.tronWeb;
+}
+function tronParams(e, extra = []) {
+  return [{type: "address", value: e.merchant}, {type: "address", value: e.feeRecipient}, {type: "uint16", value: e.feeBps},
+    {type: "uint64", value: e.feeFixed}, {type: "bytes32", value: e.salt}, ...extra];
+}
+async function checkTron(e) {
+  const tw = await ensureTron(e.net);
+  const r = await tw.transactionBuilder.triggerConstantContract(e.net.factory, TRON_SIG.computeAddress, {}, tronParams(e), tron.account);
+  const hex = (r.constant_result || [""])[0];
+  const computed = hex ? tw.address.fromHex("41" + hex.slice(-40)) : "";
+  e.state = computed === e.address ? "match" : "mismatch";
+  if (e.state !== "match") return;
+  const acc = await tw.trx.getContract(e.address).catch(() => null);
+  e.deployed = !!(acc && acc.bytecode);
+  e.balances = [];
+  for (const [symbol, token, decimals] of e.net.tokens.concat(e.extraTokens)) {
+    const b = await tw.transactionBuilder.triggerConstantContract(token, "balanceOf(address)", {}, [{type: "address", value: e.address}], tron.account);
+    e.balances.push({symbol, token, decimals, amount: BigInt("0x" + ((b.constant_result || ["0"])[0] || "0"))});
+  }
+  e.balances.push({symbol: "TRX", token: null, decimals: 6, amount: BigInt(await tw.trx.getBalance(e.address))});
+}
+async function forwardTron(e) {
+  const tw = await ensureTron(e.net);
+  const tokens = e.balances.filter((b) => b.token && b.amount > 0n).map((b) => b.token);
+  const native = e.balances.some((b) => !b.token && b.amount > 0n);
+  const r = await tw.transactionBuilder.triggerSmartContract(e.net.factory, TRON_SIG.deployAndFlush, {feeLimit: TRON_FEE_LIMIT},
+    tronParams(e, [{type: "address[]", value: tokens}, {type: "bool", value: native}]), tron.account);
+  if (!r.result?.result) throw new Error(JSON.stringify(r.result || r));
+  const signed = await tw.trx.sign(r.transaction);
+  const sent = await tw.trx.sendRawTransaction(signed);
+  if (!sent.result) throw new Error(JSON.stringify(sent));
+  const id = signed.txID;
+  log(t("sent") + id + "  " + explorerTx(e.net, id));
+  for (let i = 0; i < 60; i++) {
+    await new Promise((ok) => setTimeout(ok, 3000));
+    const info = await tw.trx.getTransactionInfo(id).catch(() => ({}));
+    if (info && info.id) {
+      if (info.receipt?.result && info.receipt.result !== "SUCCESS") throw new Error(t("failed") + id + " " + info.receipt.result);
+      return id;
+    }
+  }
+  return id;
+}
+
+// ---------------------------------------------------------------- actions
+function showWallet() {
+  const parts = [];
+  if (evm) parts.push("EVM " + short(evm.account) + " · chain " + evm.chainId);
+  if (tron) parts.push("Tron " + short(tron.account) + (tron.nile ? " · Nile" : ""));
+  $("walletInfo").textContent = parts.join("  |  ");
+}
+async function check(i) {
+  const e = entries[i];
+  try { await (e.net.tron ? checkTron(e) : checkEvm(e)); }
+  catch (err) { log((err && err.message) || String(err), "bad"); }
+  render();
+}
+async function forward(i) {
+  const e = entries[i];
+  try {
+    await (e.net.tron ? checkTron(e) : checkEvm(e)); // fresh state right before sending
+    render();
+    if (e.state !== "match") return;
+    const items = e.balances.filter((b) => b.amount > 0n);
+    if (!items.length) { log(t("empty0")); return; }
+    const fee = e.feeBps || Number(e.feeFixed)
+      ? t("confirmFee").replace("{bps}", (e.feeBps / 100).toFixed(2) + "%" + (Number(e.feeFixed) ? " + " + e.feeFixed : "")).replace("{r}", e.feeRecipient)
+      : "";
+    const text = t("confirm").replace("{f}", e.net.factory).replace("{m}", e.merchant).replace("{fee}", fee)
+      + "\n\n" + items.map((b) => `${units(b.amount, b.decimals)} ${b.symbol}`).join("\n");
+    if (!window.confirm(text)) return;
+    const what = items.map((b) => `${units(b.amount, b.decimals)} ${b.symbol}`).join(", ");
+    const tx = await (e.net.tron ? forwardTron(e) : forwardEvm(e));
+    log(t("mined") + what + " · " + tx, "ok");
+    await (e.net.tron ? checkTron(e) : checkEvm(e));
+  } catch (err) { log((err && err.message) || String(err), "bad"); }
+  render();
+}
+
+// ---------------------------------------------------------------- wiring
+function fillNetSelect() {
+  const sel = $("mNet");
+  sel.textContent = "";
+  for (const [k, n] of Object.entries(NETS)) {
+    if (n.dev && !location.hash.includes("dev=1")) continue;
+    const o = document.createElement("option"); o.value = k; o.textContent = n.name; sel.appendChild(o);
+  }
+}
+function fromHash() {
+  // #n=bsc&a=0x…&m=0x…&r=0x…&b=100&x=0&s=0x…  (a fragment: never sent to any server)
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (!p.get("a")) return;
+  if (addEntry({network: p.get("n"), address: p.get("a"), merchant: p.get("m"), fee_recipient: p.get("r"),
+    fee_bps: p.get("b"), fee_fixed: p.get("x") || 0, salt: p.get("s")})) log(t("loaded") + 1);
+}
+$("langBtn").onclick = () => { lang = lang === "ru" ? "en" : "ru"; localStorageSet("lang", lang); applyLang(); };
+$("kitFile").onchange = async (ev) => { const f = ev.target.files[0]; if (f) loadKit(await f.text()); };
+$("kitLoad").onclick = () => loadKit($("kitText").value);
+$("mAdd").onclick = () => {
+  if (addEntry({network: $("mNet").value, address: $("mAddr").value, merchant: $("mMerchant").value, fee_recipient: $("mFeeR").value,
+    fee_bps: $("mBps").value || 0, fee_fixed: $("mFixed").value || 0, salt: $("mSalt").value})) render();
+};
+$("connectEvm").onclick = () => connectEvm().catch((err) => log(err.message || String(err), "bad"));
+$("connectTron").onclick = () => connectTron().catch((err) => log(err.message || String(err), "bad"));
+fillNetSelect();
+fromHash();
+applyLang();
+</script>
+</body>
+</html>
