@@ -124,11 +124,11 @@ const NETS = {
   tron: {name: "Tron", tron: true, nile: false, factory: "TNkKPtZs79Fz8qEckmjEvRyXVxhiUDKGzp", native: "TRX",
     explorer: "https://tronscan.org", tokens: [["USDT", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", 6]]},
   sepolia: {name: "Sepolia (test)", chainId: 11155111, factory: EVM_FACTORY, native: "ETH", explorer: "https://sepolia.etherscan.io",
-    rpc: "https://ethereum-sepolia-rpc.publicnode.com", tokens: [["USDT", "0x5DEC28792fbF05C4272252a5008A86b9ED46aBf7", 6]]},
+    rpc: "https://ethereum-sepolia-rpc.publicnode.com", tokens: [["mUSD", "0x5DEC28792fbF05C4272252a5008A86b9ED46aBf7", 6]]},
   "bsc-testnet": {name: "BNB Chain testnet", chainId: 97, factory: EVM_FACTORY, native: "BNB", explorer: "https://testnet.bscscan.com",
-    rpc: "https://bsc-testnet-rpc.publicnode.com", tokens: [["USDT", "0x7f16a363339614A1479b529f65fA56Ca793a68F0", 6]]},
+    rpc: "https://bsc-testnet-rpc.publicnode.com", tokens: [["mUSD", "0x7f16a363339614A1479b529f65fA56Ca793a68F0", 6]]},
   "base-sepolia": {name: "Base Sepolia (test)", chainId: 84532, factory: EVM_FACTORY, native: "ETH", explorer: "https://sepolia.basescan.org",
-    rpc: "https://sepolia.base.org", tokens: [["USDT", "0x7f16a363339614A1479b529f65fA56Ca793a68F0", 6]]},
+    rpc: "https://sepolia.base.org", tokens: [["mUSD", "0x7f16a363339614A1479b529f65fA56Ca793a68F0", 6]]},
   "tron-nile": {name: "Tron Nile (test)", tron: true, nile: true, factory: "TGUD7c2jTpNEGBgi3f8tGBosVzX6jacvEH", native: "TRX",
     explorer: "https://nile.tronscan.org", tokens: [["USDT", "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf", 6]]},
   localhost: {name: "Local dev chain", chainId: 31337, factory: EVM_FACTORY, native: "ETH", explorer: "", dev: true, tokens: []},
@@ -438,7 +438,8 @@ async function checkTron(e) {
   e.state = computed === e.address ? "match" : "mismatch";
   if (e.state !== "match") return;
   const acc = await tw.trx.getContract(e.address).catch(() => null);
-  e.deployed = !!(acc && acc.bytecode);
+  // a forwarder created by the factory comes back without bytecode: only contract_address / code_hash
+  e.deployed = !!(acc && (acc.contract_address || acc.code_hash || acc.bytecode));
   e.balances = [];
   for (const [symbol, token, decimals] of e.net.tokens.concat(e.extraTokens)) {
     const b = await tw.transactionBuilder.triggerConstantContract(token, "balanceOf(address)", {}, [{type: "address", value: e.address}], tron.account);

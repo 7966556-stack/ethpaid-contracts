@@ -26,9 +26,9 @@ NETS = {
     "bsc": (56, "https://bsc-rpc.publicnode.com",
             [("USDT", "0x55d398326f99059fF775485246999027B3197955", 18), ("USDC", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18)]),
     "base": (8453, "https://base-rpc.publicnode.com", [("USDC", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6)]),
-    "sepolia": (11155111, "https://ethereum-sepolia-rpc.publicnode.com", [("USDT", "0x5DEC28792fbF05C4272252a5008A86b9ED46aBf7", 6)]),
-    "bsc-testnet": (97, "https://bsc-testnet-rpc.publicnode.com", [("USDT", "0x7f16a363339614A1479b529f65fA56Ca793a68F0", 6)]),
-    "base-sepolia": (84532, "https://base-sepolia-rpc.publicnode.com", [("USDT", "0x7f16a363339614A1479b529f65fA56Ca793a68F0", 6)]),
+    "sepolia": (11155111, "https://ethereum-sepolia-rpc.publicnode.com", [("mUSD", "0x5DEC28792fbF05C4272252a5008A86b9ED46aBf7", 6)]),
+    "bsc-testnet": (97, "https://bsc-testnet-rpc.publicnode.com", [("mUSD", "0x7f16a363339614A1479b529f65fA56Ca793a68F0", 6)]),
+    "base-sepolia": (84532, "https://base-sepolia-rpc.publicnode.com", [("mUSD", "0x7f16a363339614A1479b529f65fA56Ca793a68F0", 6)]),
     "localhost": (31337, "http://127.0.0.1:8545", []),
 }
 SEL_COMPUTE, SEL_FLUSH, SEL_BALANCE = "7db7e86c", "a20a1944", "70a08231"  # keccak256(signature)[:4]
