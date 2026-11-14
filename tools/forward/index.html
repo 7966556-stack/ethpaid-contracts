@@ -51,7 +51,6 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
 </head>
 <body>
 <main>
-  <div class="lang"><button id="langBtn" type="button">RU</button></div>
   <h1 data-t="title"></h1>
   <p class="muted" data-t="lead"></p>
 
@@ -181,54 +180,14 @@ const T = {
     tronEnergy: "On Tron the network fee is paid in TRX (energy); keep ~30 TRX on the connected account.",
     footer: "Open source, no tracking, no servers: works the same when saved to your computer. ETHPAID never receives your keys or funds. Code: github.com/7966556-stack/ethpaid-contracts",
   },
-  ru: {
-    title: "Пересылка платежей самостоятельно",
-    lead: "Каждый платёжный адрес ETHPAID — смарт-контракт, который может отправить средства только на ваш кошелёк выплат (и фиксированную комиссию сервиса, записанную в нём). Здесь вы запускаете пересылку своим кошельком — без серверов ETHPAID.",
-    howTitle: "Как это работает",
-    how1: "Загрузите параметры: файл выгрузки из бота или API ETHPAID, ссылку из счёта или введите вручную.",
-    how2: "Подключите кошелёк (MetaMask, Rabby, Trust… для Ethereum, BNB Chain, Base; TronLink для Tron). Подойдёт любой — он только платит комиссию сети.",
-    how3: "Страница спросит публичный контракт-фабрику, действительно ли адрес соответствует этим параметрам, и покажет, что на нём лежит.",
-    how4: "«Переслать» отправляет одну транзакцию фабрике. Средства отправляет сам контракт — получателям, записанным в нём.",
-    never: "Никогда и нигде не вводите сид-фразу или приватный ключ. Эта страница их не запрашивает.",
-    loadTitle: "1. Параметры",
-    loadHint: "Файл выгрузки: бот → Настройки → «Набор для самостоятельной пересылки» или GET /v1/forward-kit в API.",
-    orPaste: "…или вставьте его содержимое (JSON):",
-    load: "Загрузить",
-    manualTitle: "Ввести один адрес вручную",
-    fNetwork: "Сеть", fAddress: "Платёжный адрес", fMerchant: "Кошелёк выплат (магазина)", fFeeRcpt: "Получатель комиссии",
-    fFeeBps: "Комиссия, базисные пункты (100 = 1 %)", fFeeFixed: "Фиксированная комиссия, единицы токена (только Tron)", fSalt: "Соль (0x…, 32 байта)",
-    add: "Добавить",
-    listTitle: "2. Адреса",
-    connectEvm: "Подключить кошелёк", connectTron: "Подключить TronLink",
-    empty: "Адреса ещё не загружены.",
-    cNet: "Сеть", cAddr: "Адрес", cTo: "Куда могут уйти средства", cState: "Состояние",
-    check: "Проверить", forward: "Переслать",
-    feeTo: "комиссия", feeNone: "без комиссии",
-    notChecked: "не проверен", match: "✓ совпадает с фабрикой", mismatch: "✗ НЕ соответствует параметрам — не используйте",
-    notDeployed: "контракт ещё не создан (создастся при первой пересылке)", deployed: "контракт создан",
-    empty0: "пересылать нечего",
-    needWallet: "Сначала подключите кошелёк для этой сети.",
-    wrongTron: "TronLink подключён к другой сети Tron. Переключите на: ",
-    noEvm: "В браузере нет Ethereum-кошелька. Установите MetaMask или Rabby или откройте страницу во встроенном браузере кошелька.",
-    noTron: "TronLink не найден. Установите TronLink или откройте страницу в его браузере.",
-    confirm: "Будет отправлена одна транзакция фабрике {f}.\nКонтракт перешлёт всё перечисленное на:\n  {m}\n{fee}\nВы платите только комиссию сети. Продолжить?",
-    confirmFee: "  комиссия: {bps} → {r}",
-    sent: "Отправлено: ", mined: "Готово. Переслано: ", failed: "Транзакция не прошла: ",
-    unknownNet: "Неизвестная сеть: ", badFactory: "Фабрика не официальная для этой сети — запись пропущена: ",
-    loaded: "Загружено адресов: ",
-    logTitle: "Журнал",
-    tronEnergy: "В Tron комиссия сети платится в TRX (энергия): держите на подключённом аккаунте ~30 TRX.",
-    footer: "Открытый код, без отслеживания и серверов: работает так же, если сохранить страницу на компьютер. ETHPAID не получает ваши ключи и средства. Код: github.com/7966556-stack/ethpaid-contracts",
-  },
 };
-let lang = (localStorageGet("lang") || (navigator.language || "en")).toLowerCase().startsWith("ru") ? "ru" : "en";
+let lang = "en";
 function localStorageGet(k) { try { return localStorage.getItem("ethpaid-forward:" + k); } catch { return null; } }
 function localStorageSet(k, v) { try { localStorage.setItem("ethpaid-forward:" + k, v); } catch { /* private mode */ } }
 const t = (k) => T[lang][k] ?? T.en[k] ?? k;
 function applyLang() {
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = t(el.dataset.t); });
-  document.getElementById("langBtn").textContent = lang === "ru" ? "EN" : "RU";
   render();
 }
 
@@ -521,7 +480,6 @@ function fromHash() {
   if (addEntry({network: p.get("n"), address: p.get("a"), merchant: p.get("m"), fee_recipient: p.get("r"),
     fee_bps: p.get("b"), fee_fixed: p.get("x") || 0, salt: p.get("s")})) log(t("loaded") + 1);
 }
-$("langBtn").onclick = () => { lang = lang === "ru" ? "en" : "ru"; localStorageSet("lang", lang); applyLang(); };
 $("kitFile").onchange = async (ev) => { const f = ev.target.files[0]; if (f) loadKit(await f.text()); };
 $("kitLoad").onclick = () => loadKit($("kitText").value);
 $("mAdd").onclick = () => {

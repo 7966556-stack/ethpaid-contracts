@@ -1,6 +1,6 @@
 # ethpaid-contracts
 
-Non-custodial payment addresses for **ETHPAID Pay** (EVM chains and Tron), operated by SIA ETHPAID (Latvia).
+Non-custodial payment addresses for **ETHPAID Pay** (EVM chains and Tron). Developed by SIA ETHPAID (Latvia).
 
 - `ForwarderFactory` — computes and deploys payment addresses (EIP-1167 clones via CREATE2).
 - `PaymentForwarder` — the clone: forwards everything it receives to the merchant (minus an optional fee).
@@ -47,9 +47,9 @@ read from the chain and checked against the expected addresses.
 | Same address on all EVM chains | factory is deployed with CREATE2 through `0x4e59b44847b379578588920ca78fbf26c0b4956c`; a payment sent on the wrong EVM network can still be forwarded once the factory exists there. |
 | Tokens | `SafeERC20` — works with USDT (no return value); tokens returning `false` revert and stay in place. |
 
-Two fee plans (chosen per merchant):
-- **prepaid** — `feeBps = 0`, `feeRecipient = address(0)`; one transfer per flush, fee is charged from the merchant's prepaid balance off-chain.
-- **on-chain fee** — `feeBps > 0`; the clone splits every flush between `feeRecipient` and the merchant.
+Fee: with `feeBps > 0` the clone splits every flush between `feeRecipient` and the merchant (ETHPAID Pay uses
+100 bps = 1 %; on Tron also a fixed `feeFixed`). With `feeBps = 0` and `feeRecipient = address(0)` the whole amount
+goes to the merchant.
 
 ## Forward your payments yourself
 
@@ -69,14 +69,14 @@ Details, the salt formula and the explorer fields: [docs/self-forward.md](docs/s
 
 | Scenario | Gas |
 |---|---|
-| `deployAndFlush` USDT, prepaid plan | 111 259 |
-| `deployAndFlush` USDT, on-chain fee plan | 121 477 (138 577 on the very first payment to a new fee wallet) |
+| `deployAndFlush` USDT, no fee | 111 259 |
+| `deployAndFlush` USDT, with fee | 121 477 (138 577 on the very first payment to a new fee wallet) |
 | `flushToken` USDT, already deployed (static address) | 51 632 |
 | Factory deployment (one-time per chain) | ~1.5 M |
 
 At 0.25 gwei and ETH = $2 507 a flush costs ≈ $0.07–0.08; at 5 gwei ≈ $1.4–1.5. On BSC/Base/Polygon — fractions of a cent.
 
-## Known properties / caveats (for the auditor)
+## Known properties / caveats
 
 - Native coin sent to an **already deployed** clone goes through the proxy's `delegatecall` (more than 2 300 gas). Some exchanges send native coins with a tight gas limit; use fresh (undeployed) addresses for native-coin invoices, static addresses for tokens.
 - A merchant wallet that rejects the native coin makes `flushNative` revert; funds stay in the clone until the wallet can receive.
@@ -107,15 +107,7 @@ Expected addresses (same on every chain, valid until the bytecode changes):
 | Base Sepolia (84532) | `0xFA109f39ff2300D2016c145E0519eCfe7e64BD60` | |
 | BSC Testnet (97) | `0xFA109f39ff2300D2016c145E0519eCfe7e64BD60` | requires priority fee ≥ 0.1 gwei (`--priority-gas-price 100000000`), otherwise txs hang in public mempools |
 
-End-to-end test payments with a mock token passed on all three networks (both fee plans).
+## Status
 
-| `deployAndFlush` (fresh address, new holders) | Sepolia (Glamsterdam) | Base Sepolia | BSC Testnet |
-|---|---|---|---|
-| prepaid plan | 479 185 | 90 239 – 115 977 | 115 977 |
-| on-chain fee plan | 494 703 | 107 183 – 124 283 | 124 283 |
-
-**Glamsterdam (EIP-8037) is live on Sepolia since 06.10.2026, mainnet expected Q4 2026**: creating new state (contracts, new token holders) is charged separately, so a fresh payment address on Ethereum L1 costs ~4× more gas than today. Mitigation for the backend: reuse already-deployed forwarders (per-merchant pool / static addresses) instead of one new clone per invoice on L1; L2s are unaffected in practice. Note: Foundry 1.8.5 under-estimates gas on Sepolia — use `--gas-estimate-multiplier`.
-
-Lesson from Base Sepolia: a load-balanced public RPC returned stale state, so a flush ran before the payment was visible and 100 test tokens stayed on an undeployed address. They were recovered later by anyone-can-flush (salt brute-forced from the timestamp). Backend rule: detect payments and flush only after N confirmations on the same node, and re-scan issued addresses periodically.
-
-Status: **not audited. Testnets only.**
+v1.0.0 is deployed on Ethereum, BNB Chain, Base and Tron mainnets (26.10.2026). No external audit yet;
+internal static analysis: [docs/static-analysis-2026-10-24.md](docs/static-analysis-2026-10-24.md).

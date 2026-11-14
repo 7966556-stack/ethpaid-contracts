@@ -15,7 +15,7 @@ for it: everything below works without our servers, and keeps working if ETHPAID
 | `network`, `address` | the invoice |
 | `factory` | `0xFA109f39ff2300D2016c145E0519eCfe7e64BD60` on Ethereum, BNB Chain, Base (and their testnets); `TNkKPtZs79Fz8qEckmjEvRyXVxhiUDKGzp` on Tron (Nile: `TGUD7c2jTpNEGBgi3f8tGBosVzX6jacvEH`) |
 | `merchant` | your payout wallet at the time the invoice was created |
-| `fee_recipient`, `fee_bps` | the fee written into the address (prepaid plan: `0x000…000` and `0`) |
+| `fee_recipient`, `fee_bps` | the fee written into the address (addresses without a fee: `0x000…000` and `0`) |
 | `fee_fixed` | Tron only: the fixed network fee in token units (`0` on EVM) |
 | `salt` | 32 bytes, see below |
 
@@ -74,7 +74,7 @@ On Etherscan / BscScan / BaseScan open the factory → **Contract → Write Cont
 | Field | Value |
 |---|---|
 | merchant | your payout wallet |
-| feeRecipient | from the export (prepaid: `0x0000000000000000000000000000000000000000`) |
+| feeRecipient | from the export (no fee: `0x0000000000000000000000000000000000000000`) |
 | feeBps | from the export (e.g. `100`) |
 | salt | from the export (`0x…`, 64 hex digits) |
 | tokens | e.g. `[0x55d398326f99059fF775485246999027B3197955]` (the tokens on the address) |
